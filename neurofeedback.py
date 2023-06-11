@@ -18,69 +18,96 @@ import matplotlib.pyplot as plt  # Module used for plotting
 from pylsl import StreamInlet, resolve_byprop  # Module to receive EEG data
 import utils  # Our own utility functions
 
-# Handy little enum to make code more readable
+from colorama import init, Fore, Back, Style
 
-# Below imports all neccessary packages to make this Python Script run
+# Initializes Colorama
+init(autoreset=True)
+
 import time
 # import board
-from adafruit_motor import stepper
-from adafruit_motorkit import MotorKit
-
+try:
+    from adafruit_motor import stepper
+    from adafruit_motorkit import MotorKit
+    kit = MotorKit()
+except ImportError:
+    print('Did not load motor kit')
 # Below initialises the variable kit to be our I2C Connected Adafruit Motor HAT
-# kit = MotorKit(i2c=board.I2C()) # doesn't appear to be needed?
-kit = MotorKit()
+# kit = MotorKit(i2c=board.I2C()) # i2c=board.I2C() doesn't appear to be needed
 
-import time
-
-setting = 'HIGH'
-in_motion = False
-baseline = .8
-distance = 90
-
-def set_to_high():
-    global in_motion
-    print('setting to high')
-    for i in range(distance):
-      print('step anticlockwise', i)
-      kit.stepper2.onestep(direction=stepper.BACKWARD, style=stepper.SINGLE)
-      time.sleep(.01)
-    kit.stepper2.release()
-
-    print('setting in motion to false')
-    in_motion = False
-    
-
-def set_to_low():
-    global in_motion
-    print('setting to low')
-    for i in range(distance):
-      print('step clockwise', i)
-      kit.stepper2.onestep(direction=stepper.FORWARD, style=stepper.SINGLE)
-      time.sleep(.01)
-    kit.stepper2.release()
-
-    print('setting in motion to false')
-    in_motion = False
-
-def set_dial(val):
-    global setting
-    global in_motion
-    if in_motion == False:
-      if val > baseline:
-          if setting == 'LOW':
-            print('setting in motion to true')
-            in_motion = True
-            set_to_high()
-            setting = 'HIGH'
-
-      if val < baseline:
-          if setting == 'HIGH':
-            print('setting in motion to true')
-            in_motion = True
-            set_to_low()
-            setting = 'LOW'
+activate_fire_threshold = 10
+motor_steps = 90
+# motor_steps = 20
+last_update_time = time.time()
+update_fire_seconds = 30
 
 
+def print_level(metric):
+    # print(' ')
+    # print(metric)
+    multiplier = 100
+    max_width = 60
+    rounded_metric = int(metric * multiplier)
+    if rounded_metric < 1:
+        rounded_metric = 1
+
+    rounded_activate_fire_threshold = int(activate_fire_threshold * multiplier)
+    if rounded_activate_fire_threshold < 1:
+        rounded_activate_fire_threshold = 1
+    level = ""
+    for i in range(max_width):
+        if i == rounded_activate_fire_threshold:
+            level = f"{level + Style.BRIGHT + Fore.WHITE}|{Style.BRIGHT + Fore.GREEN}"
+        elif i < rounded_metric:
+            level = f"{Style.BRIGHT + Fore.GREEN + level}|"
+        elif i > rounded_metric:
+            level = f"{level} "
+    print(level)
+
+
+
+
+def fire_control(metric):
+    global last_update_time
+    global activate_fire_threshold
+
+    print_level(metric)
+
+    current_time = time.time()
+    if (current_time - last_update_time) > update_fire_seconds:
+        last_update_time = current_time
+        
+        print(' ')
+        print("COMPARING LEVELS")
+        time.sleep(2)
+
+        if metric > activate_fire_threshold:
+            print(' ')
+            print(Style.BRIGHT + Fore.RED + 'ACTIVATING FIRE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+            print(' ')
+            time.sleep(1)
+            
+            for i in range(motor_steps):
+                # print('step anticlockwise', i)
+                if 'kit' in globals():
+                    kit.stepper2.onestep(direction=stepper.BACKWARD, style=stepper.SINGLE)
+                time.sleep(.01)
+                if 'kit' in globals():
+                    kit.stepper2.release()
+
+            time.sleep(3)
+
+            for i in range(motor_steps):
+                # print('step clockwise', i)
+                if 'kit' in globals():
+                    kit.stepper2.onestep(direction=stepper.FORWARD, style=stepper.SINGLE)
+                time.sleep(.01)
+                if 'kit' in globals():
+                    kit.stepper2.release()
+
+        activate_fire_threshold  = metric
+
+
+# Handy little enum to make code more readable
 class Band:
     Delta = 0
     Theta = 1
@@ -186,6 +213,7 @@ if __name__ == "__main__":
             # print('Delta: ', band_powers[Band.Delta], ' Theta: ', band_powers[Band.Theta],
             #       ' Alpha: ', band_powers[Band.Alpha], ' Beta: ', band_powers[Band.Beta])
 
+
             """ 3.3 COMPUTE NEUROFEEDBACK METRICS """
             # These metrics could also be used to drive brain-computer interfaces
 
@@ -193,8 +221,8 @@ if __name__ == "__main__":
             # Simple redout of alpha power, divided by delta waves in order to rule out noise
             alpha_metric = smooth_band_powers[Band.Alpha] / \
                 smooth_band_powers[Band.Delta]
-            print('Alpha Relaxation: ', alpha_metric)
-            set_dial(alpha_metric)
+            # print('Alpha Relaxation: ', alpha_metric)
+            metric = alpha_metric
 
             # Beta Protocol:
             # Beta waves have been used as a measure of mental activity and concentration
@@ -202,6 +230,7 @@ if __name__ == "__main__":
             # beta_metric = smooth_band_powers[Band.Beta] / \
             #     smooth_band_powers[Band.Theta]
             # print('Beta Concentration: ', beta_metric)
+            # metric = beta_metric
 
             # Alpha/Theta Protocol:
             # This is another popular neurofeedback metric for stress reduction
@@ -209,6 +238,9 @@ if __name__ == "__main__":
             # theta_metric = smooth_band_powers[Band.Theta] / \
             #     smooth_band_powers[Band.Alpha]
             # print('Theta Relaxation: ', theta_metric)
+            # metric = theta_metric
+
+            fire_control(metric)
 
     except KeyboardInterrupt:
         print('Closing!')
