@@ -35,16 +35,16 @@ except ImportError:
 # kit = MotorKit(i2c=board.I2C()) # i2c=board.I2C() doesn't appear to be needed
 
 activate_fire_threshold = 10
-motor_steps = 130
-# motor_steps = 20
+# motor_steps = 90
+motor_steps = 20
 last_update_time = time.time()
 update_fire_seconds = 30
 
 
 def print_level(metric):
     # print(' ')
-    print(metric)
-    multiplier = 60
+    # print(metric)
+    multiplier = 100
     max_width = 60
     rounded_metric = int(metric * multiplier)
     if rounded_metric < 1:
@@ -87,17 +87,17 @@ def fire_control(metric):
             time.sleep(1)
             
             for i in range(motor_steps):
-                # print('step anticlockwise', i)
+                print('step anticlockwise', i)
                 if 'kit' in globals():
                     kit.stepper2.onestep(direction=stepper.FORWARD, style=stepper.SINGLE)
                 time.sleep(.01)
                 if 'kit' in globals():
                     kit.stepper2.release()
 
-            time.sleep(10)
+            time.sleep(3)
 
             for i in range(motor_steps):
-                # print('step clockwise', i)
+                print('step clockwise', i)
                 if 'kit' in globals():
                     kit.stepper2.onestep(direction=stepper.BACKWARD, style=stepper.SINGLE)
                 time.sleep(.01)
