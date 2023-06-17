@@ -69,7 +69,12 @@ def print_level(metric):
 def fire_control(metric):
     global last_update_time
     global activate_fire_threshold
-
+    
+    # dont do anything if signal runs away (usually when not on head
+    if metric > 1.3 or metric < 0:
+        print('LOOKING FOR BRAIN')
+        return
+        
     print_level(metric)
 
     current_time = time.time()
