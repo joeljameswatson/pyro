@@ -57,7 +57,7 @@ def print_level(metric):
     for i in range(max_width):
         if i == rounded_activate_fire_threshold:
             level = f"{level + Style.BRIGHT + Fore.WHITE}|{Style.BRIGHT + Fore.GREEN}"
-        elif i < rounded_metric:
+        elif i - 1 < rounded_metric:
             level = f"{Style.BRIGHT + Fore.GREEN + level}|"
         elif i > rounded_metric:
             level = f"{level} "
