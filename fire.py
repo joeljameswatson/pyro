@@ -36,22 +36,36 @@ except ImportError:
 # kit = MotorKit(i2c=board.I2C()) # i2c=board.I2C() doesn't appear to be needed
 
 
-
-
-STANDARD_DEVIATION_MAX=200
-STANDARD_DEVIATION_MIN=10
+STANDARD_DEVIATION_MAX=250
+STANDARD_DEVIATION_MIN=5
 MOTOR_STEPS = 130
 UPDATE_FIRE_SECONDS = 30
 FIRE_BURN_TIME = 20
+
+# bump up val (good for beta when too low)
+BETA_BUMP = .5
+
+# fire step levels
+FIRE_STEP_LEVEL_0 = 0
+FIRE_STEP_LEVEL_1 = 30
+FIRE_STEP_LEVEL_2 = 60
+FIRE_STEP_LEVEL_3 = 90
+FIRE_STEP_LEVEL_4 = 130
+
 activate_fire_threshold = 10
 good_samples = [False] * 10
 eeg_metric = "alpha"
+update_mode = "1"
+current_step = 0
 
 brain_connected = False
 last_update_time = time.time()
 
 if (len(sys.argv) > 1):
     eeg_metric = sys.argv[1]
+
+if (len(sys.argv) > 2):
+    update_mode = sys.argv[2]
 
 metric_dict = {
     "alpha": "RELAXATION",
@@ -154,6 +168,100 @@ def fire_control(metric):
         activate_fire_threshold  = metric
         time.sleep(1)
 
+def fire_control2(metric):
+    global last_update_time
+    global activate_fire_threshold
+    global brain_connected
+    global current_step
+    
+    if(brain_connected == True):
+        print_level(metric)
+        
+
+    current_time = time.time()
+    if (current_time - last_update_time) > UPDATE_FIRE_SECONDS:
+        last_update_time = current_time
+
+
+        def move_to_step(target_step):
+            global current_step
+
+            if (current_step > target_step):
+                print('turning down')
+                time.sleep(2)
+                step_down(current_step - target_step)
+            elif (current_step < target_step):
+                print('turning up')
+                time.sleep(2)
+                step_up(target_step - current_step)
+            else:
+                # print('no change')
+                time.sleep(2)
+            
+            current_step = target_step
+
+            #update level
+
+        def step_up(up_steps):    
+            for i in range(up_steps):
+                # print('step anticlockwise', i)
+                if 'kit' in globals():
+                    kit.stepper2.onestep(direction=stepper.FORWARD, style=stepper.SINGLE)
+                time.sleep(.01)
+                if 'kit' in globals():
+                    kit.stepper2.release()
+
+        def step_down(down_steps): 
+            for i in range(down_steps):
+                # print('step clockwise', i)
+                if 'kit' in globals():
+                    kit.stepper2.onestep(direction=stepper.BACKWARD, style=stepper.SINGLE)
+                time.sleep(.01)
+                if 'kit' in globals():
+                    kit.stepper2.release()
+
+                print(' ')
+
+        if (brain_connected == True):
+            print(f"COMPARING {metric_desc} LEVELS")
+            time.sleep(2)
+            print(' ')
+            
+            print('UPDATING LEVEL...')
+            activate_fire_threshold  = metric
+
+            # print_level(metric)
+
+        if (brain_connected == False):
+            print('brain disconnect stop fire')
+            move_to_step(FIRE_STEP_LEVEL_0)
+        elif (activate_fire_threshold < .25):
+            #1/4
+            # step 30
+            move_to_step(FIRE_STEP_LEVEL_1)
+        elif (activate_fire_threshold >= .25 and activate_fire_threshold < .5):
+            # 1/2
+            # step 60
+            move_to_step(FIRE_STEP_LEVEL_2)
+        elif (activate_fire_threshold >= .5 and activate_fire_threshold < .75):
+            # step 90
+            move_to_step(FIRE_STEP_LEVEL_3)
+        elif (activate_fire_threshold >= .75):
+            # step 130
+            move_to_step(FIRE_STEP_LEVEL_3)
+        else:
+            move_to_step(FIRE_STEP_LEVEL_0)
+
+# set to baseline when connected  
+# move activate_fire_threshold to predefined level
+# print metric to show new level moving to
+# 4 levels
+# 0 no brain
+# 1 < 25%
+# 2 < 50%
+# 3 <  
+
+
 
 
 if __name__ == "__main__":
@@ -217,14 +325,9 @@ if __name__ == "__main__":
                 st = int(st_float)
 
                 if (st < STANDARD_DEVIATION_MAX and st > STANDARD_DEVIATION_MIN):
-                    brain_connected = True
                     good_samples.append(True)
                     # print('brain attached')
                 else:
-                    print(f"SEARCHING FOR BRAIN")
-                    print(f"PLEASE KEEP STILL..  {STANDARD_DEVIATION_MAX} | {st}")
-                    print("")
-                    brain_connected = False
                     good_samples.append(False)
 
                 good_samples.pop(0)
@@ -233,6 +336,9 @@ if __name__ == "__main__":
                     brain_connected = True
                 else:
                     brain_connected = False
+                    print(f"SEARCHING FOR BRAIN")
+                    print(f"PLEASE KEEP STILL..  {STANDARD_DEVIATION_MAX} | {st}")
+                    print("")
                     
 
                 # Only keep the channel we're interested in
@@ -287,20 +393,24 @@ if __name__ == "__main__":
                 # print('Theta Relaxation: ', theta_metric)
                 # metric = theta_metric
 
-
                 metric_val = 0
    
-                if (eeg_metric == "beta"):
-                    metric_val = smooth_band_powers[Band.Beta] / \
-                        smooth_band_powers[Band.Theta]
-                    # print('beta')
-                else:
+                if (eeg_metric == "alpha"):
                     metric_val = smooth_band_powers[Band.Alpha] / \
                         smooth_band_powers[Band.Delta]
                     # print('alpha')
-                    
+                elif (eeg_metric == "beta"):
+                    metric_val = smooth_band_powers[Band.Beta] / \
+                        smooth_band_powers[Band.Theta]
+                    metric_val = metric_val + BETA_BUMP
 
-                fire_control(metric_val)
+                # print(f"{eeg_metric} {metric_val}")
+                
+                if (update_mode == "1"):
+                   fire_control(metric_val)
+                elif (update_mode == "2"):
+                    fire_control2(metric_val) 
+
                 
             except Exception as e: print(e)
 
