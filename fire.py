@@ -34,83 +34,17 @@ except ImportError:
 # Below initialises the variable kit to be our I2C Connected Adafruit Motor HAT
 # kit = MotorKit(i2c=board.I2C()) # i2c=board.I2C() doesn't appear to be needed
 
+
+STANDARD_DEVIATION_MAX=200
+STANDARD_DEVIATION_MIN=10
+MOTOR_STEPS = 130
+UPDATE_FIRE_SECONDS = 30
+FIRE_BURN_TIME = 20
 activate_fire_threshold = 10
-motor_steps = 130
-# motor_steps = 20
+good_samples = [False] * 10
+
+brain_connected = False
 last_update_time = time.time()
-update_fire_seconds = 30
-
-
-def print_level(metric):
-    # print(' ')
-    print(metric)
-    multiplier = 60
-    max_width = 60
-    rounded_metric = int(metric * multiplier)
-    if rounded_metric < 1:
-        rounded_metric = 1
-
-    rounded_activate_fire_threshold = int(activate_fire_threshold * multiplier)
-    if rounded_activate_fire_threshold < 1:
-        rounded_activate_fire_threshold = 1
-    level = ""
-    for i in range(max_width):
-        if i == rounded_activate_fire_threshold:
-            level = f"{level + Style.BRIGHT + Fore.WHITE}|{Style.BRIGHT + Fore.GREEN}"
-        elif i - 1 < rounded_metric:
-            level = f"{Style.BRIGHT + Fore.GREEN + level}|"
-        elif i > rounded_metric:
-            level = f"{level} "
-    print(level)
-
-
-
-
-def fire_control(metric):
-    global last_update_time
-    global activate_fire_threshold
-    
-    # dont do anything if signal runs away (usually when not on head
-    if metric > 1.3 or metric < 0:
-        print('LOOKING FOR BRAIN')
-        return
-        
-    print_level(metric)
-
-    current_time = time.time()
-    if (current_time - last_update_time) > update_fire_seconds:
-        last_update_time = current_time
-        
-        print(' ')
-        print("COMPARING LEVELS")
-        time.sleep(2)
-
-        if metric > activate_fire_threshold:
-            print(' ')
-            print(Style.BRIGHT + Fore.RED + 'ACTIVATING FIRE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-            print(' ')
-            time.sleep(1)
-            
-            for i in range(motor_steps):
-                # print('step anticlockwise', i)
-                if 'kit' in globals():
-                    kit.stepper2.onestep(direction=stepper.FORWARD, style=stepper.SINGLE)
-                time.sleep(.01)
-                if 'kit' in globals():
-                    kit.stepper2.release()
-
-            time.sleep(10)
-
-            for i in range(motor_steps):
-                # print('step clockwise', i)
-                if 'kit' in globals():
-                    kit.stepper2.onestep(direction=stepper.BACKWARD, style=stepper.SINGLE)
-                time.sleep(.01)
-                if 'kit' in globals():
-                    kit.stepper2.release()
-
-        activate_fire_threshold  = metric
-
 
 # Handy little enum to make code more readable
 class Band:
@@ -139,6 +73,74 @@ SHIFT_LENGTH = EPOCH_LENGTH - OVERLAP_LENGTH
 # Index of the channel(s) (electrodes) to be used
 # 0 = left ear, 1 = left forehead, 2 = right forehead, 3 = right ear
 INDEX_CHANNEL = [0]
+
+def print_level(metric):
+    multiplier = 60
+    max_width = 60
+    rounded_metric = int(metric * multiplier)
+    if rounded_metric < 1:
+        rounded_metric = 1
+
+    rounded_activate_fire_threshold = int(activate_fire_threshold * multiplier)
+    if rounded_activate_fire_threshold < 1:
+        rounded_activate_fire_threshold = 1
+    level = ""
+    for i in range(max_width):
+        if i == rounded_activate_fire_threshold:
+            level = f"{level + Style.BRIGHT + Fore.WHITE}|{Style.BRIGHT + Fore.GREEN}"
+        elif i - 1 < rounded_metric:
+            level = f"{Style.BRIGHT + Fore.GREEN + level}|"
+        elif i > rounded_metric:
+            level = f"{level} "
+    print(level)
+
+def fire_control(metric):
+    global last_update_time
+    global activate_fire_threshold
+    global brain_connected
+    
+    if brain_connected == False:
+        return
+        
+    print_level(metric)
+
+    current_time = time.time()
+    if (current_time - last_update_time) > UPDATE_FIRE_SECONDS:
+        last_update_time = current_time
+        
+        print(' ')
+        print("COMPARING LEVELS")
+        time.sleep(2)
+        print(' ')
+
+        if metric > activate_fire_threshold:
+            print(Style.BRIGHT + Fore.WHITE + 'ACTIVATING FIRE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+            print(' ')
+            time.sleep(1)
+            
+            for i in range(MOTOR_STEPS):
+                # print('step anticlockwise', i)
+                if 'kit' in globals():
+                    kit.stepper2.onestep(direction=stepper.FORWARD, style=stepper.SINGLE)
+                time.sleep(.01)
+                if 'kit' in globals():
+                    kit.stepper2.release()
+
+            time.sleep(FIRE_BURN_TIME)
+
+            for i in range(MOTOR_STEPS):
+                # print('step clockwise', i)
+                if 'kit' in globals():
+                    kit.stepper2.onestep(direction=stepper.BACKWARD, style=stepper.SINGLE)
+                time.sleep(.01)
+                if 'kit' in globals():
+                    kit.stepper2.release()
+
+        print('SETTING ACTIVATION LEVEL')
+        activate_fire_threshold  = metric
+        time.sleep(1)
+
+
 
 if __name__ == "__main__":
 
@@ -188,64 +190,91 @@ if __name__ == "__main__":
     try:
         # The following loop acquires data, computes band powers, and calculates neurofeedback metrics based on those band powers
         while True:
+            try:
+                """ 3.1 ACQUIRE DATA """
+                # Obtain EEG data from the LSL stream
+                eeg_data, timestamp = inlet.pull_chunk(
+                    timeout=1, max_samples=int(SHIFT_LENGTH * fs))
+                
+                # print(eeg_data)
 
-            """ 3.1 ACQUIRE DATA """
-            # Obtain EEG data from the LSL stream
-            eeg_data, timestamp = inlet.pull_chunk(
-                timeout=1, max_samples=int(SHIFT_LENGTH * fs))
+                standard_deviations = np.std(eeg_data, axis=0)
+                st_float = standard_deviations[0]
+                st = int(st_float)
 
-            # Only keep the channel we're interested in
-            ch_data = np.array(eeg_data)[:, INDEX_CHANNEL]
+                if (st < STANDARD_DEVIATION_MAX and st > STANDARD_DEVIATION_MIN):
+                    brain_connected = True
+                    good_samples.append(True)
+                    # print('brain attached')
+                else:
+                    print(f"SEARCHING FOR BRAIN")
+                    print(f"PLEASE KEEP STILL..  {STANDARD_DEVIATION_MAX} | {st}")
+                    print("")
+                    brain_connected = False
+                    good_samples.append(False)
 
-            # Update EEG buffer with the new data
-            eeg_buffer, filter_state = utils.update_buffer(
-                eeg_buffer, ch_data, notch=True,
-                filter_state=filter_state)
+                good_samples.pop(0)
 
-            """ 3.2 COMPUTE BAND POWERS """
-            # Get newest samples from the buffer
-            data_epoch = utils.get_last_data(eeg_buffer,
-                                             EPOCH_LENGTH * fs)
+                if (all(good_samples)):
+                    brain_connected = True
+                else:
+                    brain_connected = False
+                    
 
-            # Compute band powers
-            band_powers = utils.compute_band_powers(data_epoch, fs)
-            band_buffer, _ = utils.update_buffer(band_buffer,
-                                                 np.asarray([band_powers]))
-            # Compute the average band powers for all epochs in buffer
-            # This helps to smooth out noise
-            smooth_band_powers = np.mean(band_buffer, axis=0)
+                # Only keep the channel we're interested in
+                ch_data = np.array(eeg_data)[:, INDEX_CHANNEL]
 
-            # print('Delta: ', band_powers[Band.Delta], ' Theta: ', band_powers[Band.Theta],
-            #       ' Alpha: ', band_powers[Band.Alpha], ' Beta: ', band_powers[Band.Beta])
+                # Update EEG buffer with the new data
+                eeg_buffer, filter_state = utils.update_buffer(
+                    eeg_buffer, ch_data, notch=True,
+                    filter_state=filter_state)
+
+                """ 3.2 COMPUTE BAND POWERS """
+                # Get newest samples from the buffer
+                data_epoch = utils.get_last_data(eeg_buffer,
+                                                EPOCH_LENGTH * fs)
+                # print(data_epoch)
+
+                # Compute band powers
+                band_powers = utils.compute_band_powers(data_epoch, fs)
+                band_buffer, _ = utils.update_buffer(band_buffer,
+                                                    np.asarray([band_powers]))
+                # Compute the average band powers for all epochs in buffer
+                # This helps to smooth out noise
+                smooth_band_powers = np.mean(band_buffer, axis=0)
+
+                # print('Delta: ', band_powers[Band.Delta], ' Theta: ', band_powers[Band.Theta],
+                #       ' Alpha: ', band_powers[Band.Alpha], ' Beta: ', band_powers[Band.Beta])
 
 
-            """ 3.3 COMPUTE NEUROFEEDBACK METRICS """
-            # These metrics could also be used to drive brain-computer interfaces
+                """ 3.3 COMPUTE NEUROFEEDBACK METRICS """
+                # These metrics could also be used to drive brain-computer interfaces
 
-            # Alpha Protocol:
-            # Simple redout of alpha power, divided by delta waves in order to rule out noise
-            alpha_metric = smooth_band_powers[Band.Alpha] / \
-                smooth_band_powers[Band.Delta]
-            # print('Alpha Relaxation: ', alpha_metric)
-            metric = alpha_metric
+                # Alpha Protocol:
+                # Simple redout of alpha power, divided by delta waves in order to rule out noise
+                alpha_metric = smooth_band_powers[Band.Alpha] / \
+                    smooth_band_powers[Band.Delta]
+                # print('Alpha Relaxation: ', alpha_metric)
+                metric = alpha_metric
 
-            # Beta Protocol:
-            # Beta waves have been used as a measure of mental activity and concentration
-            # This beta over theta ratio is commonly used as neurofeedback for ADHD
-            # beta_metric = smooth_band_powers[Band.Beta] / \
-            #     smooth_band_powers[Band.Theta]
-            # print('Beta Concentration: ', beta_metric)
-            # metric = beta_metric
+                # Beta Protocol:
+                # Beta waves have been used as a measure of mental activity and concentration
+                # This beta over theta ratio is commonly used as neurofeedback for ADHD
+                # beta_metric = smooth_band_powers[Band.Beta] / \
+                #     smooth_band_powers[Band.Theta]
+                # print('Beta Concentration: ', beta_metric)
+                # metric = beta_metric
 
-            # Alpha/Theta Protocol:
-            # This is another popular neurofeedback metric for stress reduction
-            # Higher theta over alpha is supposedly associated with reduced anxiety
-            # theta_metric = smooth_band_powers[Band.Theta] / \
-            #     smooth_band_powers[Band.Alpha]
-            # print('Theta Relaxation: ', theta_metric)
-            # metric = theta_metric
+                # Alpha/Theta Protocol:
+                # This is another popular neurofeedback metric for stress reduction
+                # Higher theta over alpha is supposedly associated with reduced anxiety
+                # theta_metric = smooth_band_powers[Band.Theta] / \
+                #     smooth_band_powers[Band.Alpha]
+                # print('Theta Relaxation: ', theta_metric)
+                # metric = theta_metric
 
-            fire_control(metric)
+                fire_control(metric)
+            except Exception as e: print(e)
 
     except KeyboardInterrupt:
         print('Closing!')
