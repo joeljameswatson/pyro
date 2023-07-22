@@ -19,6 +19,7 @@ from pylsl import StreamInlet, resolve_byprop  # Module to receive EEG data
 import utils  # Our own utility functions
 
 from colorama import init, Fore, Back, Style
+import sys
 
 # Initializes Colorama
 init(autoreset=True)
@@ -35,6 +36,8 @@ except ImportError:
 # kit = MotorKit(i2c=board.I2C()) # i2c=board.I2C() doesn't appear to be needed
 
 
+
+
 STANDARD_DEVIATION_MAX=200
 STANDARD_DEVIATION_MIN=10
 MOTOR_STEPS = 130
@@ -42,9 +45,20 @@ UPDATE_FIRE_SECONDS = 30
 FIRE_BURN_TIME = 20
 activate_fire_threshold = 10
 good_samples = [False] * 10
+eeg_metric = "alpha"
 
 brain_connected = False
 last_update_time = time.time()
+
+if (len(sys.argv) > 1):
+    eeg_metric = sys.argv[1]
+
+metric_dict = {
+    "alpha": "RELAXATION",
+    "beta": "FOCUS"
+}
+
+metric_desc = metric_dict[eeg_metric]
 
 # Handy little enum to make code more readable
 class Band:
@@ -109,7 +123,7 @@ def fire_control(metric):
         last_update_time = current_time
         
         print(' ')
-        print("COMPARING LEVELS")
+        print(f"COMPARING {metric_desc} LEVELS")
         time.sleep(2)
         print(' ')
 
@@ -252,17 +266,17 @@ if __name__ == "__main__":
 
                 # Alpha Protocol:
                 # Simple redout of alpha power, divided by delta waves in order to rule out noise
-                alpha_metric = smooth_band_powers[Band.Alpha] / \
-                    smooth_band_powers[Band.Delta]
+                # alpha_metric = smooth_band_powers[Band.Alpha] / \
+                #     smooth_band_powers[Band.Delta]
+                # metric = alpha_metric
                 # print('Alpha Relaxation: ', alpha_metric)
-                metric = alpha_metric
 
                 # Beta Protocol:
                 # Beta waves have been used as a measure of mental activity and concentration
                 # This beta over theta ratio is commonly used as neurofeedback for ADHD
                 # beta_metric = smooth_band_powers[Band.Beta] / \
                 #     smooth_band_powers[Band.Theta]
-                # print('Beta Concentration: ', beta_metric)
+                # # print('Beta Concentration: ', beta_metric)
                 # metric = beta_metric
 
                 # Alpha/Theta Protocol:
@@ -273,7 +287,21 @@ if __name__ == "__main__":
                 # print('Theta Relaxation: ', theta_metric)
                 # metric = theta_metric
 
-                fire_control(metric)
+
+                metric_val = 0
+   
+                if (eeg_metric == "beta"):
+                    metric_val = smooth_band_powers[Band.Beta] / \
+                        smooth_band_powers[Band.Theta]
+                    # print('beta')
+                else:
+                    metric_val = smooth_band_powers[Band.Alpha] / \
+                        smooth_band_powers[Band.Delta]
+                    # print('alpha')
+                    
+
+                fire_control(metric_val)
+                
             except Exception as e: print(e)
 
     except KeyboardInterrupt:
