@@ -38,9 +38,9 @@ except ImportError:
 
 STANDARD_DEVIATION_MAX=250
 STANDARD_DEVIATION_MIN=5
-MOTOR_STEPS = 130
+MOTOR_STEPS = 110
 UPDATE_FIRE_SECONDS = 30
-FIRE_BURN_TIME = 20
+FIRE_BURN_TIME = 10
 
 # bump up val (good for beta when too low)
 BETA_BUMP = .5
@@ -50,7 +50,7 @@ FIRE_STEP_LEVEL_0 = 0
 FIRE_STEP_LEVEL_1 = 30
 FIRE_STEP_LEVEL_2 = 60
 FIRE_STEP_LEVEL_3 = 90
-FIRE_STEP_LEVEL_4 = 130
+FIRE_STEP_LEVEL_4 = 100
 
 activate_fire_threshold = 10
 good_samples = [False] * 10
@@ -404,7 +404,7 @@ if __name__ == "__main__":
                         smooth_band_powers[Band.Theta]
                     metric_val = metric_val + BETA_BUMP
 
-                # print(f"{eeg_metric} {metric_val}")
+                print(f"{eeg_metric} {metric_val}")
                 
                 if (update_mode == "1"):
                    fire_control(metric_val)
