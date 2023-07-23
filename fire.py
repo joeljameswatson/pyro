@@ -47,10 +47,10 @@ BETA_BUMP = .5
 
 # fire step levels
 FIRE_STEP_LEVEL_0 = 0
-FIRE_STEP_LEVEL_1 = 30
-FIRE_STEP_LEVEL_2 = 60
-FIRE_STEP_LEVEL_3 = 90
-FIRE_STEP_LEVEL_4 = 100
+FIRE_STEP_LEVEL_1 = 20
+FIRE_STEP_LEVEL_2 = 40
+FIRE_STEP_LEVEL_3 = 80
+FIRE_STEP_LEVEL_4 = 110
 
 activate_fire_threshold = 10
 good_samples = [False] * 10
@@ -185,6 +185,8 @@ def fire_control2(metric):
 
         def move_to_step(target_step):
             global current_step
+            
+            print(f"move to step {target_step}")
 
             if (current_step > target_step):
                 print('turning down')
@@ -234,22 +236,28 @@ def fire_control2(metric):
 
         if (brain_connected == False):
             print('brain disconnect stop fire')
+            print("FIRE_STEP_LEVEL_0")
             move_to_step(FIRE_STEP_LEVEL_0)
         elif (activate_fire_threshold < .25):
             #1/4
             # step 30
+            print("FIRE_STEP_LEVEL_1")
             move_to_step(FIRE_STEP_LEVEL_1)
         elif (activate_fire_threshold >= .25 and activate_fire_threshold < .5):
             # 1/2
             # step 60
+            print("FIRE_STEP_LEVEL_2")
             move_to_step(FIRE_STEP_LEVEL_2)
         elif (activate_fire_threshold >= .5 and activate_fire_threshold < .75):
             # step 90
+            print("FIRE_STEP_LEVEL_3")
             move_to_step(FIRE_STEP_LEVEL_3)
         elif (activate_fire_threshold >= .75):
             # step 130
+            print("FIRE_STEP_LEVEL_4")
             move_to_step(FIRE_STEP_LEVEL_3)
         else:
+            print("FIRE_STEP_LEVEL_0")
             move_to_step(FIRE_STEP_LEVEL_0)
 
 # set to baseline when connected  
@@ -404,7 +412,7 @@ if __name__ == "__main__":
                         smooth_band_powers[Band.Theta]
                     metric_val = metric_val + BETA_BUMP
 
-                print(f"{eeg_metric} {metric_val}")
+                # print(f"{eeg_metric} {metric_val}")
                 
                 if (update_mode == "1"):
                    fire_control(metric_val)
